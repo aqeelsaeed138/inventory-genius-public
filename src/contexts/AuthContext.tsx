@@ -86,8 +86,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       (event, currentSession) => {
         if (!mounted) return;
 
-        // Handle sign out
-        if (event === 'SIGNED_OUT') {
+        // Handle sign out or token refresh failure
+        if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED' && !currentSession) {
           setSession(null);
           setUser(null);
           setProfile(null);
@@ -134,8 +134,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         // No session - stop loading immediately
         setLoading(false);
       }
-    }).catch((error) => {
+    }).catch(async (error) => {
       console.error("Error getting session:", error);
+      // Clear potentially corrupted session data
+      try {
+        await supabase.auth.signOut({ scope: 'local' });
+      } catch (_) { /* ignore */ }
       if (mounted) {
         setLoading(false);
         setProfileLoading(false);

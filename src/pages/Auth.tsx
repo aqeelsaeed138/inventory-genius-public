@@ -35,7 +35,7 @@ const Auth = () => {
   
   // Refs for cleanup
   const abortControllerRef = useRef<AbortController | null>(null);
-  const submitTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const submitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setIsSignUp(searchParams.get("mode") === "signup");
