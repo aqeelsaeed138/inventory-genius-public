@@ -157,7 +157,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const redirectUrl = `${window.location.origin}/dashboard`;
       
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -169,6 +169,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
 
       if (error) throw error;
+      
+      // Detect duplicate signup: Supabase returns success but with empty identities
+      if (data?.user && (!data.user.identities || data.user.identities.length === 0)) {
+        return { error: new Error("This email is already registered. Please sign in instead.") };
+      }
+      
       return { error: null };
     } catch (error) {
       return { error: error as Error };

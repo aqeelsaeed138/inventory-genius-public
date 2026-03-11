@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams, Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Package, Mail, Lock, User, ArrowLeft, Eye, EyeOff, Loader2, WifiOff, AlertTriangle } from "lucide-react";
+import { Package, Mail, Lock, User, ArrowLeft, Eye, EyeOff, Loader2, WifiOff, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { 
@@ -25,6 +25,8 @@ const Auth = () => {
   const [isSignUp, setIsSignUp] = useState(searchParams.get("mode") === "signup");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [signUpSuccess, setSignUpSuccess] = useState(false);
+  const [signUpEmail, setSignUpEmail] = useState("");
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -33,18 +35,16 @@ const Auth = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touchedFields, setTouchedFields] = useState<Set<string>>(new Set());
   
-  // Refs for cleanup
   const abortControllerRef = useRef<AbortController | null>(null);
   const submitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setIsSignUp(searchParams.get("mode") === "signup");
-    // Reset errors when switching modes
     setErrors({});
     setTouchedFields(new Set());
+    setSignUpSuccess(false);
   }, [searchParams]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       abortControllerRef.current?.abort();
@@ -54,7 +54,7 @@ const Auth = () => {
     };
   }, []);
 
-  // Redirect if already logged in (wait for profile to load)
+  // Redirect if already logged in
   useEffect(() => {
     if (user && !loading && !profileLoading) {
       if (profile?.company_id) {
@@ -65,11 +65,9 @@ const Auth = () => {
     }
   }, [user, profile, loading, profileLoading, navigate]);
 
-  // Real-time validation on blur
   const handleBlur = useCallback((field: string) => {
     setTouchedFields(prev => new Set(prev).add(field));
     
-    // Validate single field
     const schema = isSignUp ? signUpSchema : signInSchema;
     const result = validateForm(schema, formData);
     
@@ -80,8 +78,7 @@ const Auth = () => {
         return next;
       });
     } else if (result.success === false) {
-      const validationErrors = result.errors;
-      const fieldError = validationErrors[field];
+      const fieldError = result.errors[field];
       if (fieldError) {
         setErrors(prev => ({ ...prev, [field]: fieldError }));
       } else {
@@ -94,14 +91,10 @@ const Auth = () => {
     }
   }, [formData, isSignUp]);
 
-  // Debounced input handler
   const handleInputChange = useCallback((field: string, value: string) => {
-    // Trim email, allow spaces in name
     const trimmedValue = field === "email" ? value.trim() : value;
-    
     setFormData(prev => ({ ...prev, [field]: trimmedValue }));
     
-    // Clear error when user starts typing (if field was touched)
     if (touchedFields.has(field) && errors[field]) {
       setErrors(prev => {
         const next = { ...prev };
@@ -114,23 +107,19 @@ const Auth = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Prevent double submission
     if (submitting) return;
     
-    // Check network status
     if (!isOnline) {
       toast.error("No internet connection. Please check your connection and try again.");
       return;
     }
 
-    // Validate form
     const schema = isSignUp ? signUpSchema : signInSchema;
     const validationResult = validateForm(schema, formData);
     
     if (validationResult.success === false) {
-      const validationErrors = validationResult.errors;
-      setErrors(validationErrors);
-      setTouchedFields(new Set(Object.keys(validationErrors)));
+      setErrors(validationResult.errors);
+      setTouchedFields(new Set(Object.keys(validationResult.errors)));
       toast.error("Please fix the errors before submitting");
       return;
     }
@@ -138,10 +127,8 @@ const Auth = () => {
     setSubmitting(true);
     setErrors({});
 
-    // Set up abort controller for request cancellation
     abortControllerRef.current = new AbortController();
     
-    // Set timeout for slow requests
     submitTimeoutRef.current = setTimeout(() => {
       if (submitting) {
         toast.warning("This is taking longer than expected. Please wait...");
@@ -153,39 +140,17 @@ const Auth = () => {
         const { error } = await signUp(formData.email, formData.password, formData.fullName);
         
         if (error) {
-          const errorMsg = error.message?.toLowerCase() || "";
-          
-          if (errorMsg.includes("already registered") || errorMsg.includes("already been registered")) {
-            setErrors({ email: "This email is already registered. Please sign in instead." });
-            toast.error("An account with this email already exists. Please sign in.");
-          } else if (errorMsg.includes("invalid email") || errorMsg.includes("unable to validate")) {
-            setErrors({ email: "Please enter a valid email address." });
-            toast.error("Invalid email address.");
-          } else if (errorMsg.includes("password") && (errorMsg.includes("weak") || errorMsg.includes("short") || errorMsg.includes("length"))) {
-            setErrors({ password: "Password is too weak. Use at least 6 characters." });
-            toast.error("Password is too weak.");
-          } else if (errorMsg.includes("rate limit") || errorMsg.includes("too many requests")) {
-            toast.error("Too many attempts. Please wait a moment and try again.");
-          } else {
-            const message = getNetworkErrorMessage(error);
-            toast.error(message);
-          }
+          handleSignUpError(error);
         } else {
-          toast.success("A confirmation link has been sent to your email. Please check your inbox to verify your account.", { duration: 6000 });
+          // Show email verification pending screen
+          setSignUpEmail(formData.email);
+          setSignUpSuccess(true);
         }
       } else {
         const { error } = await signIn(formData.email, formData.password);
         
         if (error) {
-          const message = getNetworkErrorMessage(error);
-          toast.error(message);
-          
-          if (error.message.includes("Invalid login") || error.message.includes("Invalid credentials")) {
-            setErrors({ 
-              email: " ",
-              password: "Invalid email or password" 
-            });
-          }
+          handleSignInError(error);
         } else {
           toast.success("Welcome back!");
         }
@@ -202,6 +167,84 @@ const Auth = () => {
     }
   };
 
+  const handleSignUpError = (error: Error) => {
+    const errorMsg = error.message?.toLowerCase() || "";
+    
+    if (errorMsg.includes("already registered") || errorMsg.includes("already been registered") || errorMsg.includes("user already registered")) {
+      setErrors({ email: "This email is already registered." });
+      toast.error(
+        "An account with this email already exists. Please sign in instead.",
+        {
+          action: {
+            label: "Sign In",
+            onClick: () => {
+              setIsSignUp(false);
+              setErrors({});
+              setTouchedFields(new Set());
+              setFormData(prev => ({ ...prev, password: "", fullName: "" }));
+            },
+          },
+          duration: 6000,
+        }
+      );
+    } else if (errorMsg.includes("invalid email") || errorMsg.includes("unable to validate")) {
+      setErrors({ email: "Please enter a valid email address." });
+      toast.error("Invalid email address.");
+    } else if (errorMsg.includes("password") && (errorMsg.includes("weak") || errorMsg.includes("short") || errorMsg.includes("length"))) {
+      setErrors({ password: "Password is too weak. Use at least 8 characters with uppercase, lowercase, number, and special character." });
+      toast.error("Password is too weak.");
+    } else if (errorMsg.includes("rate limit") || errorMsg.includes("too many requests")) {
+      toast.error("Too many attempts. Please wait a moment and try again.");
+    } else if (errorMsg.includes("email not confirmed") || errorMsg.includes("confirmation")) {
+      toast.error("Please check your email and confirm your account first.");
+    } else {
+      const message = getNetworkErrorMessage(error);
+      toast.error(message);
+    }
+  };
+
+  const handleSignInError = (error: Error) => {
+    const errorMsg = error.message?.toLowerCase() || "";
+    
+    if (errorMsg.includes("invalid login") || errorMsg.includes("invalid credentials")) {
+      setErrors({ 
+        email: " ",
+        password: "Invalid email or password. Please check your credentials." 
+      });
+      toast.error("Invalid email or password. Please try again.", {
+        action: {
+          label: "Forgot Password?",
+          onClick: () => navigate("/forgot-password"),
+        },
+        duration: 5000,
+      });
+    } else if (errorMsg.includes("email not confirmed")) {
+      setErrors({ email: "Your email is not verified yet." });
+      toast.error(
+        "Please verify your email address before signing in. Check your inbox for the confirmation link.",
+        { duration: 6000 }
+      );
+    } else if (errorMsg.includes("rate limit") || errorMsg.includes("too many requests")) {
+      toast.error("Too many login attempts. Please wait a few minutes before trying again.");
+    } else if (errorMsg.includes("user not found") || errorMsg.includes("no user found")) {
+      setErrors({ email: "No account found with this email." });
+      toast.error("No account found with this email. Would you like to sign up?", {
+        action: {
+          label: "Sign Up",
+          onClick: () => {
+            setIsSignUp(true);
+            setErrors({});
+            setTouchedFields(new Set());
+          },
+        },
+        duration: 5000,
+      });
+    } else {
+      const message = getNetworkErrorMessage(error);
+      toast.error(message);
+    }
+  };
+
   // Show loading while checking auth state
   if (loading) {
     return (
@@ -209,6 +252,68 @@ const Auth = () => {
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show email verification pending screen after successful signup
+  if (signUpSuccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
+        <div className="w-full max-w-md">
+          <Card className="border-border/50 shadow-lg">
+            <CardHeader className="text-center pb-2">
+              <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-green-100 flex items-center justify-center">
+                <CheckCircle2 className="h-8 w-8 text-green-600" />
+              </div>
+              <CardTitle className="text-2xl">Check your email</CardTitle>
+              <CardDescription className="text-base mt-2">
+                We've sent a verification link to
+              </CardDescription>
+              <p className="font-semibold text-foreground mt-1">{signUpEmail}</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="bg-muted/50 rounded-lg p-4 space-y-2 text-sm text-muted-foreground">
+                <p>📧 Check your inbox and click the verification link to activate your account.</p>
+                <p>⏱️ The link will expire in 24 hours.</p>
+                <p>📁 Don't see the email? Check your spam/junk folder.</p>
+              </div>
+              
+              <div className="pt-2 space-y-3">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setSignUpSuccess(false);
+                    setIsSignUp(false);
+                    setFormData({ email: signUpEmail, password: "", fullName: "" });
+                    setErrors({});
+                    setTouchedFields(new Set());
+                  }}
+                >
+                  <Mail className="mr-2 h-4 w-4" />
+                  Go to Sign In
+                </Button>
+                
+                <p className="text-center text-xs text-muted-foreground">
+                  Wrong email?{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSignUpSuccess(false);
+                      setIsSignUp(true);
+                      setFormData({ email: "", password: "", fullName: "" });
+                      setErrors({});
+                    }}
+                    className="text-primary font-medium hover:underline"
+                  >
+                    Sign up again
+                  </button>
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
@@ -316,7 +421,6 @@ const Auth = () => {
                   maxLength={128}
                 />
                 
-                {/* Password strength indicator for signup */}
                 {isSignUp && formData.password && (
                   <PasswordStrengthIndicator password={formData.password} />
                 )}
@@ -339,6 +443,18 @@ const Auth = () => {
               </Button>
             </form>
 
+            {/* Forgot Password link - only show on sign in */}
+            {!isSignUp && (
+              <div className="mt-3 text-center">
+                <Link
+                  to="/forgot-password"
+                  className="text-sm text-primary hover:underline font-medium"
+                >
+                  Forgot your password?
+                </Link>
+              </div>
+            )}
+
             <p className="mt-6 text-center text-sm text-muted-foreground">
               {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
               <button
@@ -358,7 +474,6 @@ const Auth = () => {
           </CardContent>
         </Card>
         
-        {/* Security note */}
         <p className="mt-4 text-center text-xs text-muted-foreground">
           Your data is encrypted and secure. We never share your information.
         </p>
