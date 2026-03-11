@@ -48,28 +48,11 @@ const TopBar = ({ onMenuClick }: TopBarProps) => {
           <Button variant="ghost" size="icon" className="lg:hidden" onClick={onMenuClick}>
             <Menu className="h-5 w-5" />
           </Button>
-        )}
-        
-        {/* Search */}
-        <div className="flex-1 max-w-md hidden md:block">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search products, orders, customers..."
-              className="pl-10 h-10 bg-secondary/50 border-0 focus-visible:ring-1"
-            />
-          </div>
-        </div>
+        )}        
       </div>
 
       {/* Right Side */}
       <div className="flex items-center gap-4">
-        {/* Notifications */}
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-5 w-5" />
-          <span className="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-destructive" />
-        </Button>
 
         {/* User Menu */}
         <DropdownMenu>
@@ -90,7 +73,6 @@ const TopBar = ({ onMenuClick }: TopBarProps) => {
             <DropdownMenuSeparator />
             <DropdownMenuItem>Profile</DropdownMenuItem>
             <DropdownMenuItem>Settings</DropdownMenuItem>
-            <DropdownMenuItem>Billing</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="text-destructive" onClick={handleSignOut}>
               Log out
