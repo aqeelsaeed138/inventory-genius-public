@@ -8,6 +8,11 @@ The application is connected to a **Supabase cloud database** and deployed local
 
 ---
 
+# 🌐 Live Demo
+
+Check out the live version of Inventory Genius here:  
+[Live Demo on Vercel](https://inventory-genius-public.vercel.app/)
+
 # 🚀 Project Overview
 
 **Inventory Genius** is a lightweight inventory management application designed to help businesses manage product inventory efficiently.
